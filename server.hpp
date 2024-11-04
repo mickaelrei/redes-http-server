@@ -4,6 +4,7 @@
 #include <ostream>
 
 #define READ_BUFFER_SIZE 1024
+#define PROTOCOL_VERSION "HTTP/1.1"
 
 /// @brief HTTP server
 class HttpServer {
@@ -16,6 +17,17 @@ public:
     void start();
     
 private:
+    /// @brief Returns the response string for a given request string
+    /// @param request request string
+    /// @return response string
+    std::string requestResponse(const std::string &request) const;
+
+    /// @brief Attempts to get a file
+    /// @param filePath file path
+    /// @param exists output boolean telling whether file exists or not
+    /// @return string content of the file
+    std::string getFile(const std::string &filePath, bool &exists) const;
+
     /// @brief Server port
     int _port;
 

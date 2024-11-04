@@ -1,4 +1,6 @@
 #include <iostream>
+#include <sstream>
+#include <fstream>
 #include <cstring>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -7,6 +9,32 @@
 
 /// @brief For socket SO_REUSEADDR option
 static const int reuseAddr = 1;
+
+/// @brief Response status codes
+enum class ResponseCode {
+    BAD_REQUEST = 400,
+    OK = 200,
+    NOT_FOUND = 404,
+};
+
+std::string _statusCodeString(ResponseCode code) {
+    switch (code) {
+        case ResponseCode::BAD_REQUEST:
+            return "Bad Request";
+        case ResponseCode::NOT_FOUND:
+            return "Not Found";
+        case ResponseCode::OK:
+            return "Ok";
+        default:
+            return "";
+    }
+}
+
+std::string _responseStatusLine(ResponseCode code) {
+    std::stringstream statusLine{""};
+    statusLine << PROTOCOL_VERSION << " " << std::to_string(static_cast<int>(code)) << " " << _statusCodeString(code) << "\n";
+    return statusLine.str();
+}
 
 HttpServer::HttpServer(int port) : _port{port} {
     // Create server socket
@@ -42,10 +70,10 @@ HttpServer::HttpServer(int port) : _port{port} {
 }
 
 void HttpServer::start() {
+    struct sockaddr addr;
+    socklen_t len = 0;
     while (true) {
         // Accept client connection
-        struct sockaddr addr;
-        socklen_t len;
         int fdClient = accept(fdServer, &addr, &len);
 
         if (fdClient == -1) {
@@ -66,50 +94,96 @@ void HttpServer::start() {
             continue;
         }
 
-        // Show data
-        std::cout << "Data from client: " << readBuffer << "\n";
+        // Get response
+        std::string requestStr = readBuffer;
+        auto response = requestResponse(requestStr);
 
-        // TODO: Check if message contains correctly formed request line
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#http_requests
-        //
-        // Template:
-        // [METHOD] [URL] HTTP/[VERSION]
-        //
-        // Examples:
-        // POST / HTTP/1.1
-        // GET /image.png HTTP/1.1
-        // POST /person/2 HTTP/1.0
-
-
-
-        // TODO: Formalize response status line
-        //
-        // Template:
-        // HTTP/[VERSION] [STATUS_CODE] [STATUS_MESSAGE]
-        //
-        // Examples:
-        // HTTP/1.1 200 OK
-        // HTTP/1.1 404 Not Found
-        // HTTP/1.0 201 Created
-
-
-        // Send response (hardcoded for now)
-        std::string response = "HTTP/1.1 200 OK\n\nHello from server!\n";
-
-        printf("response: \"%s\"\n", response.c_str());
-
+        // Send response
         ssize_t n = send(fdClient, response.c_str(), response.size(), 0);
         if (n == -1) {
             std::cout << "Error on send(): " << std::strerror(errno) << "\n";
         }
 
-        std::cout << "Sent\n";
-
         // Close client socket
         if (0 != close(fdClient)) {
             std::cout << "Error on close(): " << std::strerror(errno) << "\n";
         }
-
-        std::cout << "Closed\n";
     }
+}
+
+std::string HttpServer::requestResponse(const std::string &request) const {
+    // Find first newline
+    size_t idx = request.find('\n', 0);
+    if (idx == -1UL) {
+        return _responseStatusLine(ResponseCode::BAD_REQUEST);
+    }
+
+    // Check if method and target are ok
+    bool checkedMethod = false;
+    size_t targetStartIdx = 0;
+    size_t targetEndIdx = 0;
+    for (size_t i = 0; i < idx; ++i) {
+        // Search space characters
+        if (request[i] != ' ') continue;
+
+        if (!checkedMethod) {
+            // Target starts on next char
+            targetStartIdx = i + 1;
+
+            // Checking valid methods
+            checkedMethod = true;
+            if (strncmp(request.c_str(), "GET", 3) == 0) continue;
+
+            return _responseStatusLine(ResponseCode::BAD_REQUEST);
+        } else {
+            targetEndIdx = i;
+            break;
+        }
+    }
+
+    // Check for errors
+    if (!checkedMethod || targetStartIdx == 0 || targetEndIdx == 0) {
+        return _responseStatusLine(ResponseCode::BAD_REQUEST);
+    }
+
+    // Get file content
+    auto targetPath = request.substr(targetStartIdx, targetEndIdx - targetStartIdx);
+    bool exists;
+    auto fileContent = getFile(targetPath, exists);
+
+    if (!exists) {
+        return _responseStatusLine(ResponseCode::NOT_FOUND);
+    }
+
+    // Build response text
+    std::stringstream responseStream{""};
+    responseStream << _responseStatusLine(ResponseCode::OK);
+    responseStream << "Content-Length: " << fileContent.size();
+    responseStream << "\n\n" << fileContent;
+
+    return responseStream.str();
+}
+
+std::string HttpServer::getFile(const std::string &filePath, bool &exists) const {
+    const std::string contentFolder = "./content/";
+    // Attempt to open file
+    std::ifstream file{contentFolder + filePath};
+    if (!file.is_open()) {
+        exists = false;
+        return "";
+    }
+
+    exists = true;
+    // Keep reading content
+    std::string content;
+    std::string line;
+    while (getline(file, line)) {
+        content += line;
+        content += "\n";
+    }
+
+    // Close
+    file.close();
+
+    return content;
 }
