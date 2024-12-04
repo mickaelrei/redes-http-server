@@ -1,12 +1,20 @@
 BIN := ./bin
+INCLUDE := ./include
+SRC := ./src
 
-all: $(BIN) $(BIN)/server $(BIN)/main
+all: $(BIN) $(BIN)/http_util $(BIN)/server $(BIN)/proxy_server $(BIN)/main
 
-$(BIN)/server: server.cpp server.hpp
-	$(CXX) -c server.cpp -o $(BIN)/server.o
+$(BIN)/http_util: $(SRC)/http_util.cpp $(INCLUDE)/http_util.hpp
+	$(CXX) -I$(INCLUDE) -c $(SRC)/http_util.cpp -o $(BIN)/http_util.o
+
+$(BIN)/server: $(SRC)/server.cpp $(INCLUDE)/server.hpp
+	$(CXX) -I$(INCLUDE) -c $(SRC)/server.cpp -o $(BIN)/server.o
+
+$(BIN)/proxy_server: $(SRC)/proxy_server.cpp $(INCLUDE)/proxy_server.hpp
+	$(CXX) -I$(INCLUDE) -c $(SRC)/proxy_server.cpp -o $(BIN)/proxy_server.o
 
 $(BIN)/main: main.cpp $(BIN)/server.o
-	$(CXX) main.cpp $(BIN)/server.o -o $(BIN)/main
+	$(CXX) -I$(INCLUDE) main.cpp $(BIN)/server.o $(BIN)/proxy_server.o $(BIN)/http_util.o -o $(BIN)/main
 
 $(BIN):
 	@if [ ! -d $(BIN) ]; then mkdir $(BIN); fi

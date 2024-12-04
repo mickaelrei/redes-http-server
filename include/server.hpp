@@ -4,7 +4,6 @@
 #include <ostream>
 
 #define READ_BUFFER_SIZE 1024
-#define PROTOCOL_VERSION "HTTP/1.1"
 
 /// @brief HTTP server
 class HttpServer {

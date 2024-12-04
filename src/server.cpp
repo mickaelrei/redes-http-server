@@ -5,36 +5,11 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include "http_util.hpp"
 #include "server.hpp"
 
 /// @brief For socket SO_REUSEADDR option
 static const int reuseAddr = 1;
-
-/// @brief Response status codes
-enum class ResponseCode {
-    BAD_REQUEST = 400,
-    OK = 200,
-    NOT_FOUND = 404,
-};
-
-std::string _statusCodeString(ResponseCode code) {
-    switch (code) {
-        case ResponseCode::BAD_REQUEST:
-            return "Bad Request";
-        case ResponseCode::NOT_FOUND:
-            return "Not Found";
-        case ResponseCode::OK:
-            return "Ok";
-        default:
-            return "";
-    }
-}
-
-std::string _responseStatusLine(ResponseCode code) {
-    std::stringstream statusLine{""};
-    statusLine << PROTOCOL_VERSION << " " << std::to_string(static_cast<int>(code)) << " " << _statusCodeString(code) << "\n";
-    return statusLine.str();
-}
 
 HttpServer::HttpServer(int port) : _port{port} {
     // Create server socket
@@ -66,7 +41,6 @@ HttpServer::HttpServer(int port) : _port{port} {
         std::cout << "Error on listen(): " << std::strerror(errno) << "\n";
         exit(1);
     }
-    std::cout << "Server running\n";
 }
 
 void HttpServer::start() {
@@ -115,7 +89,7 @@ std::string HttpServer::requestResponse(const std::string &request) const {
     // Find first newline
     size_t idx = request.find('\n', 0);
     if (idx == -1UL) {
-        return _responseStatusLine(ResponseCode::BAD_REQUEST);
+        return responseStatusLine(ResponseCode::BAD_REQUEST);
     }
 
     // Check if method and target are ok
@@ -134,7 +108,7 @@ std::string HttpServer::requestResponse(const std::string &request) const {
             checkedMethod = true;
             if (strncmp(request.c_str(), "GET", 3) == 0) continue;
 
-            return _responseStatusLine(ResponseCode::BAD_REQUEST);
+            return responseStatusLine(ResponseCode::BAD_REQUEST);
         } else {
             targetEndIdx = i;
             break;
@@ -143,21 +117,25 @@ std::string HttpServer::requestResponse(const std::string &request) const {
 
     // Check for errors
     if (!checkedMethod || targetStartIdx == 0 || targetEndIdx == 0) {
-        return _responseStatusLine(ResponseCode::BAD_REQUEST);
+        return responseStatusLine(ResponseCode::BAD_REQUEST);
     }
 
     // Get file content
     auto targetPath = request.substr(targetStartIdx, targetEndIdx - targetStartIdx);
+    if (targetPath.empty() || targetPath == "/") {
+        targetPath = "/index.html";
+    }
+
     bool exists;
     auto fileContent = getFile(targetPath, exists);
 
     if (!exists) {
-        return _responseStatusLine(ResponseCode::NOT_FOUND);
+        return responseStatusLine(ResponseCode::NOT_FOUND);
     }
 
     // Build response text
     std::stringstream responseStream{""};
-    responseStream << _responseStatusLine(ResponseCode::OK);
+    responseStream << responseStatusLine(ResponseCode::OK);
     responseStream << "Content-Length: " << fileContent.size();
     responseStream << "\n\n" << fileContent;
 
