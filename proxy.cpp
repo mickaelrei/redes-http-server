@@ -64,7 +64,6 @@ int main(void) {
 
         // Append new chunk to final message
         message += buf;
-        printf("%.*s\n", 2500, message.c_str());
 
         // Check if message ends with </html>
         int found = false;

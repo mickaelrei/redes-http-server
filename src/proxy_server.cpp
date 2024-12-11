@@ -169,9 +169,9 @@ std::string ProxyServer::connectToAddress(const std::string &targetAddress) cons
     connect(sock, res->ai_addr, res->ai_addrlen);
     
     // Send HTTP request
-    std::stringstream stream{"GET / HTTP/1.1\r\nHost: "};
-    stream << targetAddress << "\r\n\r\n";
-    std::string header = stream.str();
+    std::string header = "GET / HTTP/1.1\r\nHost: ";
+    header += targetAddress;
+    header += "\r\n\r\n";
     send(sock, header.c_str(), header.size(), 0);
 
     // Keep reading until finished
@@ -194,7 +194,7 @@ std::string ProxyServer::connectToAddress(const std::string &targetAddress) cons
         // Check if message ends with </html>
         int found = false;
         for (int i = 0; i < 50; ++i) {
-            if (0 == strncmp(message.c_str() + byteCount - 8 - i, "</html>", 7)) {
+            if (0 == strncmp(message.end().base() - 8 - i, "</html>", 7)) {
                 found = true;
                 break;
             }
@@ -202,11 +202,5 @@ std::string ProxyServer::connectToAddress(const std::string &targetAddress) cons
         if (found) break;
     }
 
-    // Build response text
-    std::stringstream responseStream{""};
-    responseStream << responseStatusLine(ResponseCode::OK);
-    responseStream << "Content-Length: " << message.size();
-    responseStream << "\n\n" << message;
-
-    return responseStream.str();
+    return message;
 }
